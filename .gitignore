@@ -1,6 +1,6 @@
 # Prerequisites
 *.d
-
+desktop.ini
 # Object files
 *.o
 *.ko
