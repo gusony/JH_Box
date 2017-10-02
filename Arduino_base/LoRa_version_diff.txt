@@ -1,0 +1,37 @@
+----------A----------
+1:AB對傳
+2:可以被cupper要資料
+3:可被cupper要資料，可回傳DHT22
+4:3的簡化版，刪去用不到的東西
+5:4加上其他感測器
+6:加上LCD螢幕
+7:加上ESP8266
+8:A、B皆沒有ESP8266
+9:A有ESP8266+LoRa沒有感測器
+10:偵測且上傳RSSI。
+11:可下指令
+12:Beacon
+13:nothing
+14:接受兩個hub以上的加入
+15:multi hub完成
+16:CRC，SNR，PDR，delete
+17:封包格式重寫
+18:GW控制node改變parent
+----------B----------
+1:AB對傳
+2:可以被cupper要資料
+3:可被cupper要資料，可回傳DHT22
+4:3的簡化版，刪去用不到的東西
+5:4加上其他感測器
+6:加上LCD螢幕
+7:加上ESP8266
+8:B沒有ESP8266
+9:B有LoRa跟感測器，加上ID。穩定度修正(關閉60s以上更新資料)
+10:可下指令。
+12:Beacon
+13:multi-hub 加入方式完成
+14:mesh-network雛型完成可以轉傳收到。
+15:multi hub完成
+16:CRC，SNR，PDR，delete
+17:封包格式重寫
+18:GW控制node改變parent
