@@ -211,6 +211,8 @@ unsigned char sx1276_7_8LoRaBwTbl[10] = {
 //unsigned char sx1276_7_8Data[] = {0x60,0x45,0x28,0x90,0xc0,0xb1,0x72,0xff,'h','e','l','l','o',' ','j','u','n','h','a','n'};
 unsigned char sx1276_7_8Data[] = {"Mark Lora sx1276_7_8"};
 unsigned char RxData[64];
+unsigned char compare_rxdata[]={0x60,0x45,0x28,0x90,0xc0,0xb1,0x72,0xff};
+int i;
 /*********Parameter table define**************************/
 
 /**********************************************************
@@ -457,17 +459,19 @@ unsigned char sx1276_7_8_LoRaRxPacket(void) {
       packet_size = SPIRead(LR_RegRxNbBytes); //Number for received bytes
 
     SPIBurstRead(0x00, RxData, packet_size);
-    for(i=0;i<packet_size;i++){
-      Serial.print((char)RxData[i]);
-    }
-    Serial.println();
+    
 
     sx1276_7_8_LoRaClearIrq(); 
-    /*for (i = 0; i < 17; i++)  {
-      if (RxData[i] != sx1276_7_8Data[i])
+    for (i = 0; i < 8; i++)  {
+      if (RxData[i] != compare_rxdata[i])
         break;
-    }*/
+    }
+    if(i>=8){
+      for(i=0;i<packet_size;i++){
+      Serial.print((char)RxData[i]);
+    }
     
+    }
     //if (i >= 17) //Rx success
       return (1);
     //else
@@ -621,13 +625,25 @@ void loop() {
   while (1)
   {
     //Master
-    sx1276_7_8_LoRaEntryTx();
-    sx1276_7_8_LoRaTxPacket();
-    sx1276_7_8_LoRaEntryRx();
-    
-    delay(2000);
+    if(Serial.find("OK")){
+      sx1276_7_8_LoRaEntryTx();
+      sx1276_7_8_LoRaTxPacket();
+      sx1276_7_8_LoRaEntryRx();
 
-    if(sx1276_7_8_LoRaRxPacket()){
+      delay(2000);
+
+      if(sx1276_7_8_LoRaRxPacket()){
+      }
+       /*
+      for(i=0;i<8;i++){
+        if(RxData[i]!=compare_rxdata[i]){
+          break;}
+      }
+      if(i>=8){
+        for(i=0;i<8;i++){
+         Serial.print((char)RxData[i]);
+        }
+      }*/
     }
   }
 }
