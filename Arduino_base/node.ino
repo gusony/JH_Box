@@ -13,6 +13,9 @@ int miso = 10;
 int nsel = 9;
 int dio0 = 8;
 
+#include "DHT.h"
+DHT dht(13,DHT22);
+
 /************************************************
   //  RF module:  sx1276_7_8
   //  FSK:
@@ -208,9 +211,11 @@ unsigned char sx1276_7_8SpreadFactorTbl[7] = {
 unsigned char sx1276_7_8LoRaBwTbl[10] = {
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9 //7.8,10.4,15.6,20.8,31.2,41.7,62.5,125,250,500KHz
 };
-unsigned char sx1276_7_8Data[] = {0x60,0x45,0x28,0x90,0xc0,0xb1,0x72,0xff,'h','e','l','l','o',' ','j','u','n','h','a','n'};
-//unsigned char sx1276_7_8Data[] = {"Mark Lora sx1276_7_8"};
+unsigned char sx1276_7_8Data[19] = {0x60,0x45,0x28,0x90,0xc0,0xb1,0x72,0xff};
 unsigned char RxData[64];
+int i;
+char temp[6];
+char humi[6];
 /*********Parameter table define**************************/
 
 /**********************************************************
@@ -414,23 +419,8 @@ unsigned char sx1276_7_8_LoRaEntryRx(void) {
   while (1)
   {
     if ((SPIRead(LR_RegModemStat) & 0x04) == 0x04) //Rx-on going RegModemStat
-      break;
-    /*if(SysTime>=3)
-      return 0; //over time for error
-      }*/
+      break;    
   }
-}
-/**********************************************************
-**Name: sx1276_7_8_LoRaReadRSSI
-**Function: Read the RSSI value
-**Input:  none
-**Output: temp, RSSI value
-**********************************************************/
-unsigned char sx1276_7_8_LoRaReadRSSI(void) {
-  unsigned int temp = 10;
-  temp = SPIRead(LR_RegRssiValue); //Read RegRssiValue，Rssi value
-  temp = temp + 127 - 137; //127:Max RSSI, 137: RSSI offset
-  return (unsigned char)temp;//dBm
 }
 /**********************************************************
 **Name: sx1276_7_8_LoRaRxPacket
@@ -451,27 +441,20 @@ unsigned char sx1276_7_8_LoRaRxPacket(void) {
 
     addr = SPIRead(LR_RegFifoRxCurrentaddr);//last packet addr
     SPIWrite(LR_RegFifoAddrPtr, addr);//RxBaseAddr ->   FiFoAddrPtr
-    /*if (sx1276_7_8SpreadFactorTbl[Lora_Rate_Sel] == 6) //When SpreadFactor is six，will used Implicit Header mode(Excluding internal packet length)
+    if (sx1276_7_8SpreadFactorTbl[Lora_Rate_Sel] == 6) //When SpreadFactor is six，will used Implicit Header mode(Excluding internal packet length)
       packet_size = 21;
-    else*/
+    else
       packet_size = SPIRead(LR_RegRxNbBytes); //Number for received bytes
 
     SPIBurstRead(0x00, RxData, packet_size);
+    Serial.print("RECV: ");
     for(i=0;i<packet_size;i++){
       Serial.print((char)RxData[i]);
     }
     Serial.println();
 
     sx1276_7_8_LoRaClearIrq(); 
-    /*for (i = 0; i < 17; i++)  {
-      if (RxData[i] != sx1276_7_8Data[i])
-        break;
-    }*/
-    
-    //if (i >= 17) //Rx success
-      return (1);
-    //else
-      //return (0);
+    return (1);
   }
   else
     return (0);
@@ -520,8 +503,16 @@ unsigned char sx1276_7_8_LoRaEntryTx(void) {
 unsigned char sx1276_7_8_LoRaTxPacket(void) {
   unsigned char TxFlag = 0;
   unsigned char addr;
-
-  BurstWrite(0x00, (unsigned char *)sx1276_7_8Data, 20);
+  
+  BurstWrite(0x00, (unsigned char *)sx1276_7_8Data, sizeof(sx1276_7_8Data));
+  
+  Serial.print("SEND: ");
+  for(i=0;i<sizeof(sx1276_7_8Data);i++){
+    Serial.print((char)sx1276_7_8Data[i]);
+    Serial.print(" ");
+  }
+  Serial.println();
+ 
   SPIWrite(LR_RegOpMode, 0x8b); //Tx Mode
   while (1)
   {
@@ -533,20 +524,6 @@ unsigned char sx1276_7_8_LoRaTxPacket(void) {
       break;
     }
   }
-}
-/**********************************************************
-**Name: sx1276_7_8_ReadRSSI
-**Function: Read the RSSI value
-**Input:  none
-**Output: temp, RSSI value
-**********************************************************/
-unsigned char sx1276_7_8_ReadRSSI(void) {
-  unsigned char temp = 0xff;
-
-  temp = SPIRead(0x11);
-  temp >>= 1;
-  temp = 127 - temp;//127:Max RSSI
-  return temp;
 }
 /**********************************************************
 **Name: sx1276_7_8_Config
@@ -618,12 +595,34 @@ void loop() {
 
   sx1276_7_8_Config();
   sx1276_7_8_LoRaEntryRx();
+  String arr_temp=(String)dht.readTemperature();
+  String arr_humi=(String)dht.readHumidity();
+  
   while (1)
   {
     //slaver
     if (sx1276_7_8_LoRaRxPacket())//return 1 == RX success
     {
       sx1276_7_8_LoRaEntryRx();
+
+      arr_temp=(String)dht.readTemperature();
+      arr_humi=(String)dht.readHumidity();
+    
+      arr_temp.toCharArray(temp,6);
+      arr_humi.toCharArray(humi,6);
+    
+      for(i=0;i<5;i++)
+        sx1276_7_8Data[8+i]=temp[i];
+        
+      sx1276_7_8Data[13]=',';
+      for(i=0;i<5;i++)
+        sx1276_7_8Data[14+i]=humi[i];
+        
+      Serial.print("Loop: ");
+      for(i=0;i<sizeof(sx1276_7_8Data);i++)
+       Serial.print(sx1276_7_8Data[i]);
+      Serial.println();
+      
       
       sx1276_7_8_LoRaEntryTx();
       sx1276_7_8_LoRaTxPacket();
