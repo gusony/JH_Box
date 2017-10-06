@@ -35,24 +35,15 @@
 #define REG_LR_DIOMAPPING2  0x41
 // Additional settings
 #define REG_LR_PADAC  0x4D
-
+/*********Parameter table define**************************/
 unsigned char mode;//lora--1/FSK--0
 unsigned char Freq_Sel;
 unsigned char Power_Sel;
 unsigned char Lora_Rate_Sel;
 unsigned char BandWide_Sel;
 unsigned char Fsk_Rate_Sel;
-
-int reset = 32;
-int led  = 13;
-int sck  = 12;
-int mosi = 11;
-int miso = 10;
-int nsel = 9;
-int dio0 = 8;
-/*********Parameter table define**************************/
 unsigned char sx1276_7_8FreqTbl[1][3] = {
-  {0x6C, 0x80, 0x00}, //434MHz 
+  {0x6C, 0x80, 0x00}, //434MHz
 };
 unsigned char sx1276_7_8PowerTbl[4] = {
   0xFF, 0xFC, 0xF9, 0xF6, //20dbm,17dbm,14dbm,11dbm
@@ -63,6 +54,14 @@ unsigned char sx1276_7_8SpreadFactorTbl[7] = {
 unsigned char sx1276_7_8LoRaBwTbl[10] = {
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9 //7.8,10.4,15.6,20.8,31.2,41.7,62.5,125,250,500KHz
 };
+int reset = 32;
+int led  = 13;
+int sck  = 12;
+int mosi = 11;
+int miso = 10;
+int nsel = 9;
+int dio0 = 8;
+
 //unsigned char sx1276_7_8Data[] = {0x60,0x45,0x28,0x90,0xc0,0xb1,0x72,0xff,'h','e','l','l','o',' ','j','u','n','h','a','n'};
 unsigned char sx1276_7_8Data[] = {"Mark Lora sx1276_7_8"};
 unsigned char RxData[64];
@@ -259,7 +258,7 @@ unsigned char sx1276_7_8_LoRaEntryRx(void) {
   SPIWrite(LR_RegIrqFlagsMask, 0x3F); //Open RxDone interrupt & Timeout 0011 1111
   sx1276_7_8_LoRaClearIrq();
 
-  SPIWrite(LR_RegPayloadLength, 21); //RegPayloadLength 21byte(this register must difine when the data long of one byte in SF is 6)
+  SPIWrite(LR_RegPayloadLength, 23); //RegPayloadLength 21byte(this register must difine when the data long of one byte in SF is 6)
 
   addr = SPIRead(LR_RegFifoRxBaseAddr); //Read RxBaseAddr
   SPIWrite(LR_RegFifoAddrPtr, addr); //RxBaseAddr -> FiFoAddrPtr
@@ -270,9 +269,6 @@ unsigned char sx1276_7_8_LoRaEntryRx(void) {
   {
     if ((SPIRead(LR_RegModemStat) & 0x04) == 0x04) //Rx-on going RegModemStat
       break;
-    /*if(SysTime>=3)
-      return 0; //over time for error
-      }*/
   }
 }
 /**********************************************************
@@ -288,25 +284,25 @@ unsigned char sx1276_7_8_LoRaRxPacket(void) {
   unsigned char packet_size;
 
   if (digitalRead(dio0)) //if(Get_NIRQ())
-  {
+  {    
     for (i = 0; i < 32; i++)
       RxData[i] = 0x00;
 
     addr = SPIRead(LR_RegFifoRxCurrentaddr);//last packet addr
     SPIWrite(LR_RegFifoAddrPtr, addr);//RxBaseAddr ->   FiFoAddrPtr
-    /*if (sx1276_7_8SpreadFactorTbl[Lora_Rate_Sel] == 6) //When SpreadFactor is six，will used Implicit Header mode(Excluding internal packet length)
+    if (sx1276_7_8SpreadFactorTbl[Lora_Rate_Sel] == 6) //When SpreadFactor is six，will used Implicit Header mode(Excluding internal packet length)
       packet_size = 21;
-    else*/
-    packet_size = SPIRead(LR_RegRxNbBytes); //Number for received bytes
+    else
+      packet_size = SPIRead(LR_RegRxNbBytes); //Number for received bytes
 
     SPIBurstRead(0x00, RxData, packet_size);
-    
-    for(i=0;i<SPIRead(LR_RegRxNbBytes);i++){
-      Serial.print((char)RxData[i]);
-    }    
 
-    sx1276_7_8_LoRaClearIrq(); 
-    return (1);    
+    for (i = 0; i < packet_size; i++)
+      Serial.write(RxData[i]);
+    
+
+    sx1276_7_8_LoRaClearIrq();
+    return (1);
   }
   else
     return (0);
@@ -354,7 +350,7 @@ unsigned char sx1276_7_8_LoRaTxPacket(void) {
   unsigned char addr;
 
   BurstWrite(0x00, (unsigned char *)sx1276_7_8Data, sizeof(sx1276_7_8Data));
-    
+
   SPIWrite(LR_RegOpMode, 0x8b); //Tx Mode
   while (1)
   {
@@ -415,7 +411,7 @@ void sx1276_7_8_Config(void) {
   SPIWrite(LR_RegPreambleMsb, 0x00); //RegPreambleMsb
   SPIWrite(LR_RegPreambleLsb, 12);   //RegPreambleLsb  8 + 4 = 12byte Preamble
   SPIWrite(REG_LR_DIOMAPPING2, 0x01); //RegDioMapping2 DIO5=00, DIO4=01
-  
+
   sx1276_7_8_Standby(); //Entry standby mode
 }
 void setup() {
@@ -440,12 +436,13 @@ void loop() {
   while (1)
   {
     //Master
-    if(Serial.find("OK")){
+    while(Serial.find("OK") ) {
       sx1276_7_8_LoRaEntryTx();
       sx1276_7_8_LoRaTxPacket();
       sx1276_7_8_LoRaEntryRx();
-      delay(2000);
-      sx1276_7_8_LoRaRxPacket();
+      delay(500);
+      while(sx1276_7_8_LoRaRxPacket()==0){}
+        
     }
   }
 }

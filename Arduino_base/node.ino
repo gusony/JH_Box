@@ -35,27 +35,15 @@
 #define REG_LR_DIOMAPPING2  0x41
 // Additional settings
 #define REG_LR_PADAC  0x4D
-
+/*********Parameter table define**************************/
 unsigned char mode;//lora--1/FSK--0
 unsigned char Freq_Sel;
 unsigned char Power_Sel;
 unsigned char Lora_Rate_Sel;
 unsigned char BandWide_Sel;
 unsigned char Fsk_Rate_Sel;
-
-int reset = 32;
-int led  = 13;
-int sck  = 12;
-int mosi = 11;
-int miso = 10;
-int nsel = 9;
-int dio0 = 8;
-
-#include "DHT.h"
-DHT dht(13,DHT22);
-/*********Parameter table define**************************/
 unsigned char sx1276_7_8FreqTbl[1][3] = {
-  {0x6C, 0x80, 0x00}, //434MHz 
+  {0x6C, 0x80, 0x00}, //434MHz
 };
 unsigned char sx1276_7_8PowerTbl[4] = {
   0xFF, 0xFC, 0xF9, 0xF6, //20dbm,17dbm,14dbm,11dbm
@@ -66,12 +54,78 @@ unsigned char sx1276_7_8SpreadFactorTbl[7] = {
 unsigned char sx1276_7_8LoRaBwTbl[10] = {
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9 //7.8,10.4,15.6,20.8,31.2,41.7,62.5,125,250,500KHz
 };
-unsigned char sx1276_7_8Data[19] = {0x60,0x45,0x28,0x90,0xc0,0xb1,0x72,0xff};
+int reset = 32;
+int led  = 13;
+int sck  = 12;
+int mosi = 11;
+int miso = 10;
+int nsel = 9;
+int dio0 = 8;
+
+unsigned char sx1276_7_8Data[23] = {0x60, 0x45, 0x28, 0x90, 0xc0, 0xb1, 0x72, 0xff};
 unsigned char RxData[64];
 int i;
+
+#include <SoftwareSerial.h>//這個library 同時只能begin一個serial port
+SoftwareSerial esp(3, 2); //Digital_3 as Rx ,Digital_2 as Tx
+SoftwareSerial pms(4, 5);
+
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);//addr,en,rw,rs,d4,d5,d6,d7,bl, blpol
+
+#include "DHT.h"
+DHT dht(13, DHT22);
 char temp[6];
 char humi[6];
 
+#define pms_baudrate  9600
+unsigned char pms3003[2];//store pms3003 data
+
+#define esp_baudrate 115200
+String SSID = "NEAT_2.4G";
+String PASS = "221b23251";
+String IP = "184.106.153.149"; //ThingSpeak IP
+String GET = "GET /update?key=QT2W2YQ9S6K0Q2L2"; //ThingSpeak update key
+// 使用 GET 傳送資料的格式  GET /update?key=[THINGSPEAK_KEY]&field1=[data 1]&filed2=[data 2]...;
+long start_time;//for esp command retry
+int esp_com_timeout;//esp8266 command timeout
+
+void get_temp_humi() {
+  String str_temp = (String)dht.readTemperature();
+  String str_humi = (String)dht.readHumidity();
+  str_temp.toCharArray(temp, 6);
+  str_humi.toCharArray(humi, 6);
+  for (i = 0; i < 5; i++) {
+    sx1276_7_8Data[8 + i] = temp[i];
+    sx1276_7_8Data[14 + i] = humi[i];
+  }
+  sx1276_7_8Data[13] = ',';
+  sx1276_7_8Data[19] = ',';
+}
+String do_pms() { //get pms3003 data
+  pms.begin(pms_baudrate);
+  while (1) {
+    pms.readBytes(pms3003, 2);
+    if (pms3003[0] == 0x42 || pms3003[1] == 0x4d) { //尋找每段資料的開頭
+      for (i = 0; i < 5; i++)
+        pms.readBytes(pms3003, 2);
+      break;
+    }
+  }
+  //pms3003[1]=0x1D;
+  String str_pms3003 = (String)pms3003[1];
+  char arr_pms3003[3];
+  str_pms3003.toCharArray(arr_pms3003, 3);
+  sx1276_7_8Data[20] = arr_pms3003[0];
+  sx1276_7_8Data[21] = arr_pms3003[1];
+
+  esp.begin(esp_baudrate);
+  return (String)pms3003[1];
+}
+void lcd_print(String Str, int column, int row) { //print word on lcd,column 0~15,row 0~1
+  lcd.setCursor(column, row);
+  lcd.print(Str);
+}
 /**********************************************************
 **Name:  SPICmd8bit
 **Function: SPI Write one byte
@@ -273,7 +327,7 @@ unsigned char sx1276_7_8_LoRaEntryRx(void) {
   while (1)
   {
     if ((SPIRead(LR_RegModemStat) & 0x04) == 0x04) //Rx-on going RegModemStat
-      break;    
+      break;
   }
 }
 /**********************************************************
@@ -302,12 +356,12 @@ unsigned char sx1276_7_8_LoRaRxPacket(void) {
 
     SPIBurstRead(0x00, RxData, packet_size);
     Serial.print("RECV: ");
-    for(i=0;i<packet_size;i++){
+    for (i = 0; i < packet_size; i++) {
       Serial.print((char)RxData[i]);
     }
     Serial.println();
 
-    sx1276_7_8_LoRaClearIrq(); 
+    sx1276_7_8_LoRaClearIrq();
     return (1);
   }
   else
@@ -330,8 +384,9 @@ unsigned char sx1276_7_8_LoRaEntryTx(void) {
 
   sx1276_7_8_LoRaClearIrq();
   SPIWrite(LR_RegIrqFlagsMask, 0xF7); //Open TxDone interrupt
-  SPIWrite(LR_RegPayloadLength, 21); //RegPayloadLength 21byte
-
+  SPIWrite(LR_RegPayloadLength, sizeof(sx1276_7_8Data)); //RegPayloadLength 21byte
+  Serial.print("Entry Tx payloadlength=");
+  Serial.println(sizeof(sx1276_7_8Data));
   addr = SPIRead(LR_RegFifoTxBaseAddr); //RegFiFoTxBaseAddr
   SPIWrite(LR_RegFifoAddrPtr, addr);  //RegFifoAddrPtr
 
@@ -339,7 +394,7 @@ unsigned char sx1276_7_8_LoRaEntryTx(void) {
   while (1)
   {
     temp = SPIRead(LR_RegPayloadLength);
-    if (temp == 21)
+    if (temp == sizeof(sx1276_7_8Data))
     {
       break;
     }
@@ -354,16 +409,16 @@ unsigned char sx1276_7_8_LoRaEntryTx(void) {
 unsigned char sx1276_7_8_LoRaTxPacket(void) {
   unsigned char TxFlag = 0;
   unsigned char addr;
-  
+
   BurstWrite(0x00, (unsigned char *)sx1276_7_8Data, sizeof(sx1276_7_8Data));
-  
+
   Serial.print("SEND: ");
-  for(i=0;i<sizeof(sx1276_7_8Data);i++){
+  for (i = 0; i < sizeof(sx1276_7_8Data); i++) {
     Serial.print((char)sx1276_7_8Data[i]);
     Serial.print(" ");
   }
-  Serial.println();
- 
+  Serial.println("END");
+
   SPIWrite(LR_RegOpMode, 0x8b); //Tx Mode
   while (1)
   {
@@ -424,9 +479,10 @@ void sx1276_7_8_Config(void) {
   SPIWrite(LR_RegPreambleMsb, 0x00); //RegPreambleMsb
   SPIWrite(LR_RegPreambleLsb, 12);   //RegPreambleLsb  8 + 4 = 12byte Preamble
   SPIWrite(REG_LR_DIOMAPPING2, 0x01); //RegDioMapping2 DIO5=00, DIO4=01
-  
+
   sx1276_7_8_Standby(); //Entry standby mode
 }
+
 void setup() {
   pinMode(led,  OUTPUT);
   pinMode(nsel, OUTPUT);
@@ -435,6 +491,8 @@ void setup() {
   pinMode(miso, INPUT);
   pinMode(reset, OUTPUT);
   Serial.begin(9600);
+  dht.begin();
+  lcd.begin(16, 2);
 }
 void loop() {
   mode = 0x01;
@@ -446,38 +504,18 @@ void loop() {
 
   sx1276_7_8_Config();
   sx1276_7_8_LoRaEntryRx();
-  String arr_temp=(String)dht.readTemperature();
-  String arr_humi=(String)dht.readHumidity();
-  
+
   while (1)
   {
     //slaver
     if (sx1276_7_8_LoRaRxPacket())//return 1 == RX success
     {
-      sx1276_7_8_LoRaEntryRx();
+      get_temp_humi();
+      do_pms();
 
-      arr_temp=(String)dht.readTemperature();
-      arr_humi=(String)dht.readHumidity();
-    
-      arr_temp.toCharArray(temp,6);
-      arr_humi.toCharArray(humi,6);
-    
-      for(i=0;i<5;i++)
-        sx1276_7_8Data[8+i]=temp[i];
-        
-      sx1276_7_8Data[13]=',';
-      for(i=0;i<5;i++)
-        sx1276_7_8Data[14+i]=humi[i];
-      /*
-      Serial.print("Loop: ");
-      for(i=0;i<sizeof(sx1276_7_8Data);i++)
-       Serial.print(sx1276_7_8Data[i]);
-      Serial.println();
-      */
-      
       sx1276_7_8_LoRaEntryTx();
       sx1276_7_8_LoRaTxPacket();
-      
+
       sx1276_7_8_LoRaEntryRx();
     }
   }
