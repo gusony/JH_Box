@@ -94,7 +94,9 @@ void get_temp_humi() {
   String str_temp = (String)dht.readTemperature();
   String str_humi = (String)dht.readHumidity();
   str_temp.toCharArray(temp, 6);
+  lcd_print("Temp:"+str_temp,0,1);
   str_humi.toCharArray(humi, 6);
+  lcd_print("Humi:"+str_humi,8,1);
   for (i = 0; i < 5; i++) {
     sx1276_7_8Data[8 + i] = temp[i];
     sx1276_7_8Data[14 + i] = humi[i];
@@ -104,21 +106,22 @@ void get_temp_humi() {
 }
 String do_pms() { //get pms3003 data
   pms.begin(pms_baudrate);
-  while (1) {
+  /*while (1) {
     pms.readBytes(pms3003, 2);
     if (pms3003[0] == 0x42 || pms3003[1] == 0x4d) { //尋找每段資料的開頭
       for (i = 0; i < 5; i++)
         pms.readBytes(pms3003, 2);
       break;
     }
-  }
-  //pms3003[1]=0x1D;
+  }*/
+  pms3003[1]=0x1D;
   String str_pms3003 = (String)pms3003[1];
   char arr_pms3003[3];
   str_pms3003.toCharArray(arr_pms3003, 3);
   sx1276_7_8Data[20] = arr_pms3003[0];
   sx1276_7_8Data[21] = arr_pms3003[1];
 
+  lcd_print("PM2.5: "+str_pms3003,0,0);
   esp.begin(esp_baudrate);
   return (String)pms3003[1];
 }
@@ -492,7 +495,10 @@ void setup() {
   pinMode(reset, OUTPUT);
   Serial.begin(9600);
   dht.begin();
-  lcd.begin(16, 2);
+  lcd.begin(16,2);
+  lcd.backlight();
+  lcd.clear();
+  lcd_print("hello",0,0);
 }
 void loop() {
   mode = 0x01;
